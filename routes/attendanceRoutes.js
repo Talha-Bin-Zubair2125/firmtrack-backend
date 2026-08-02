@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { protect } = require("../middlewares/authMiddleware");
 const attendanceController = require("../controllers/attendanceController");
-const employeeController = require("../controllers/employeeController");
+const employeeController = require("../controllers/EmployeeController");
 
 const {
   markAttendance,

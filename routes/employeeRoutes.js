@@ -11,7 +11,7 @@ const {
   deleteEmployee,
   searchEmployees,
   employeeLogin,
-} = require("../controllers/employeeController");
+} = require("../controllers/EmployeeController");
 
 router.post("/employees/addemployee", protect, addEmployee);
 router.get("/employees/getallemployees", protect, getAllEmployees);
