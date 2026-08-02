@@ -1,6 +1,6 @@
 const QR = require("../models/qrModel");
 const qrcode = require("qrcode");
-const { v4: uuidv4 } = require("uuid");
+const crypto = require("crypto");
 
 // Generate new QR token
 const generateQR = async (req, res) => {
@@ -9,7 +9,7 @@ const generateQR = async (req, res) => {
     await QR.updateMany({}, { isActive: false });
 
     // create new token
-    const token = uuidv4();
+    const token = crypto.randomUUID();
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 15000); // 15 seconds
 
