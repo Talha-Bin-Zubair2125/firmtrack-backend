@@ -1,2 +1,22 @@
-# firmtrack-backend
-Backend API for FirmTrack, an employee attendance management system. Built with Node.js, Express.js, and MongoDB, providing authentication, employee management, attendance tracking, QR-based attendance, deduction settings, and reporting APIs.
+# FirmTrack Backend
+
+Backend service for the FirmTrack employee attendance management system.
+
+## Features
+
+- User authentication and authorization
+- Employee record management
+- QR-based attendance system
+- Attendance tracking and reports
+- Employee deduction settings
+- MongoDB database integration
+- RESTful API architecture
+
+## Technologies
+
+- Node.js
+- Express.js
+- MongoDB
+- Mongoose
+- JWT Authentication
+- Vercel Serverless Deployment
