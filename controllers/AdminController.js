@@ -40,8 +40,8 @@ const adminLogin = async (req, res) => {
       signed: true,
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000,
-      sameSite: "lax",
-      secure: false,
+      sameSite: "none",
+      secure: true,
     });
 
     res.status(200).json({
@@ -93,11 +93,9 @@ const UpdateAdminProfile = async (req, res) => {
 
     if (password && password.trim() !== "") {
       if (!oldPassword) {
-        return res
-          .status(400)
-          .json({
-            message: "Current password is required to set a new password.",
-          });
+        return res.status(400).json({
+          message: "Current password is required to set a new password.",
+        });
       }
 
       const passwordMatch = await bcrypt.compare(oldPassword, admin.password);
