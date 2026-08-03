@@ -2,8 +2,8 @@
   "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
   "crons": [
     {
-      "path": "/api/admin/absent/markabsent",
-      "schedule": "0 18 * * *"
+      "path": "/api/admin/absent/markabsent", 
+      "schedule": "5 19 * * *"
     }
   ]
 }
