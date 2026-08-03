@@ -15,16 +15,25 @@ const attendanceRoutes = require("../routes/attendanceRoutes");
 const app = express();
 
 
-app.use(
-  cors({
-    origin: [
-      "http://localhost:5173",
-      "https://firm-track.vercel.app"
-    ],
-    credentials:true
-  })
-);
+const allowedOrigins = [
+  "https://firm-track.vercel.app",   
+  "http://localhost:5173",             
+];
 
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
 app.use(cookieParser(process.env.CookieSecret));
 app.use(express.json());
