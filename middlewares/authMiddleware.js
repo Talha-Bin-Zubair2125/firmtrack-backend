@@ -1,19 +1,30 @@
-const cookieParser = require("cookie-parser");
+const Admin = require("../models/Admin");
 
-const protect = (req, res, next) => {
-  const token =
-    (req.signedCookies && req.signedCookies.admin_id) ||
-    (req.cookies && req.cookies.admin_id);
-
-  if (!token) {
-    return res.status(401).json({ message: "Access denied." });
-  }
-
+const protect = async (req, res, next) => {
   try {
-    req.admin = { admin_id: token };
+    const adminId = req.signedCookies?.admin_id || req.cookies?.admin_id;
+
+    if (!adminId) {
+      return res.status(401).json({
+        message: "Access denied.",
+      });
+    }
+
+    const admin = await Admin.findById(adminId);
+
+    if (!admin) {
+      return res.status(401).json({
+        message: "Invalid admin.",
+      });
+    }
+
+    req.admin = admin;
+
     next();
   } catch (error) {
-    return res.status(400).json({ message: "Invalid token." });
+    res.status(500).json({
+      message: error.message,
+    });
   }
 };
 
