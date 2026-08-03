@@ -1,4 +1,4 @@
-const Admin = require("../models/Admin");
+const Admin = require("../models/Admin_Model");
 
 const protect = async (req, res, next) => {
   try {
