@@ -65,15 +65,39 @@ const markAttendance = async (req, res) => {
 
     const settings = await Deduction.findOne();
 
+    if (!settings) {
+      return res.status(500).json({
+        message:
+          "Deduction/attendance settings are not configured. Ask admin to set them up before marking attendance.",
+      });
+    }
+
     let status = "present";
     let deduction = 0;
 
-    if (currentTimeStr > "12:00") {
+    if (currentTimeStr > "16:00") {
+      status = "absent";
+      const allowedTotalLeave = settings.allowedTotalLeave || 2; // total absences allowed per month
+      const totalLeavesThisMonth = await Attendance.countDocuments({
+        employeeId: employee._id,
+        month: pktTime.getUTCMonth() + 1,
+        year: pktTime.getUTCFullYear(),
+        status: "absent",
+      });
+
+      if (totalLeavesThisMonth > allowedTotalLeave) {
+        deduction = settings.exceedsTotalLeaveDeduction || 0;
+      } else if (totalLeavesThisMonth === allowedTotalLeave) {
+        deduction = 0;
+      } else {
+        deduction = settings.deductionPerAbsence || 0;
+      }
+    } else if (currentTimeStr > settings.allowedHalfDayTime) {
       status = "half-day";
-      deduction = settings?.deductionPerHalfDay || 0;
-    } else if (currentTimeStr > "11:00") {
+      deduction = settings.deductionPerHalfDay || 0;
+    } else if (currentTimeStr > settings.lateArrivalTime) {
       status = "late";
-      deduction = settings?.deductionPerLate || 0;
+      deduction = settings.deductionPerLate || 0;
     }
 
     const attendance = await Attendance.create({
@@ -133,13 +157,11 @@ const getAttendanceByMonth = async (req, res) => {
       if (employeeObj) {
         filter.employeeId = employeeObj._id;
       } else {
-        return res
-          .status(200)
-          .json({
-            attendance: [],
-            employeeCreatedAt: null,
-            defaultAbsentDeduction: 0,
-          });
+        return res.status(200).json({
+          attendance: [],
+          employeeCreatedAt: null,
+          defaultAbsentDeduction: 0,
+        });
       }
     }
 
@@ -273,7 +295,7 @@ const backfillAbsentForDate = async (dateStr) => {
       await Attendance.create({
         employeeId: employee._id,
         date: targetDateISO,
-        checkInTime: targetDateISO,
+        checkInTime: null,
         status: "absent",
         deduction: deductionPerAbsence,
         month: month,
