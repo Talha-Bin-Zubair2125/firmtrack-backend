@@ -81,8 +81,7 @@ const UpdateAdminProfile = async (req, res) => {
   }
   try {
     const admin = req.admin;
-    // const admin = await Admin_Model.findById(req.admin.admin_id);
-
+    
     if (!admin) {
       return res
         .status(404)
