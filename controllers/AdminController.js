@@ -44,14 +44,10 @@ const adminLogin = async (req, res) => {
       secure: true,
     });
 
-    // Convert document to plain object and remove password
-    const adminObject = admin.toObject();
-    delete adminObject.password;
-
     res.status(200).json({
-      message: "Login successful",
-      user: adminObject,
+      message: "Login successful"
     });
+
   } catch (error) {
     console.error("Error during admin login:", error);
     res.status(500).json({ message: "Server error during admin login" });
@@ -69,10 +65,8 @@ const getAdminProfile = async (req, res) => {
         .json({ message: "Admin not found inside database" });
     }
 
-    // Convert document to plain object and remove password
-    const adminData = admin.toObject ? admin.toObject() : { ...admin };
-    delete adminData.password;
-
+    const adminData = await Admin_Model.findById(admin._id).select("-password");
+    
     res.status(200).json({ user: adminData });
   } catch (error) {
     console.error("Error fetching admin profile:", error);
@@ -88,7 +82,7 @@ const UpdateAdminProfile = async (req, res) => {
   }
   try {
     const admin = req.admin;
-
+    
     if (!admin) {
       return res
         .status(404)
@@ -119,7 +113,7 @@ const UpdateAdminProfile = async (req, res) => {
     const updatedAdmin = await Admin_Model.findByIdAndUpdate(
       admin._id,
       updateData,
-      { new: true }
+      { new: true },
     ).select("-password");
 
     if (!updatedAdmin) {
@@ -141,10 +135,7 @@ const UpdateAdminProfile = async (req, res) => {
 // Admin Logout controller
 const LogoutProfile = async (req, res) => {
   try {
-    res.clearCookie("admin_id", {
-      sameSite: "none",
-      secure: true,
-    });
+    res.clearCookie("admin_id");
     res.status(200).json({ message: "Logout successful" });
   } catch (error) {
     console.error("Error during logout:", error);
