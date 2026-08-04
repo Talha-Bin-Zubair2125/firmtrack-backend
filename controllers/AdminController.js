@@ -44,9 +44,13 @@ const adminLogin = async (req, res) => {
       secure: true,
     });
 
+    // Convert document to plain object and remove password
+    const adminObject = admin.toObject();
+    delete adminObject.password;
+
     res.status(200).json({
       message: "Login successful",
-      user: admin,
+      user: adminObject,
     });
   } catch (error) {
     console.error("Error during admin login:", error);
@@ -84,7 +88,7 @@ const UpdateAdminProfile = async (req, res) => {
   }
   try {
     const admin = req.admin;
-    
+
     if (!admin) {
       return res
         .status(404)
@@ -115,7 +119,7 @@ const UpdateAdminProfile = async (req, res) => {
     const updatedAdmin = await Admin_Model.findByIdAndUpdate(
       admin._id,
       updateData,
-      { new: true },
+      { new: true }
     ).select("-password");
 
     if (!updatedAdmin) {
@@ -137,7 +141,10 @@ const UpdateAdminProfile = async (req, res) => {
 // Admin Logout controller
 const LogoutProfile = async (req, res) => {
   try {
-    res.clearCookie("admin_id");
+    res.clearCookie("admin_id", {
+      sameSite: "none",
+      secure: true,
+    });
     res.status(200).json({ message: "Logout successful" });
   } catch (error) {
     console.error("Error during logout:", error);
