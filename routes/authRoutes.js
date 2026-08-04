@@ -5,7 +5,7 @@ const AdminController = require("../controllers/AdminController");
 
 // Admin Authentication
 router.post("/admin/login", AdminController.adminLogin);
-router.get("/admin/getprofile", protect, AdminController.getAdminProfile);
+router.get("/getprofile", protect, AdminController.getAdminProfile);
 router.put("/admin/updateprofile", protect, AdminController.UpdateAdminProfile);
 router.post("/admin/logout", AdminController.LogoutProfile);
 
