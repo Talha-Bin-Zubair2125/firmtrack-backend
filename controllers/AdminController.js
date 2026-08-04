@@ -65,7 +65,11 @@ const getAdminProfile = async (req, res) => {
         .json({ message: "Admin not found inside database" });
     }
 
-    res.status(200).json({ user: admin });
+    // Convert document to plain object and remove password
+    const adminData = admin.toObject ? admin.toObject() : { ...admin };
+    delete adminData.password;
+
+    res.status(200).json({ user: adminData });
   } catch (error) {
     console.error("Error fetching admin profile:", error);
     res.status(500).json({ message: "Server error fetching admin profile" });
