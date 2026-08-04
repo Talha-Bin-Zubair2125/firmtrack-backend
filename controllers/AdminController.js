@@ -57,8 +57,7 @@ const adminLogin = async (req, res) => {
 // Get admin profile controller
 const getAdminProfile = async (req, res) => {
   try {
-    const admin = req.admin;
-    const admin = await Admin_Model.findById(admin._id).select(
+    const admin = await Admin_Model.findById(req.admin.admin_id).select(
       "-password",
     );
 
@@ -82,6 +81,7 @@ const UpdateAdminProfile = async (req, res) => {
   }
   try {
     const admin = req.admin;
+    // const admin = await Admin_Model.findById(req.admin.admin_id);
 
     if (!admin) {
       return res
