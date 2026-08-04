@@ -58,15 +58,13 @@ const adminLogin = async (req, res) => {
 const getAdminProfile = async (req, res) => {
   try {
     const admin = req.admin;
-    const admin = await Admin_Model.findById(admin._id).select(
-      "-password",
-    );
 
     if (!admin) {
       return res
         .status(404)
         .json({ message: "Admin not found inside database" });
     }
+
     res.status(200).json({ user: admin });
   } catch (error) {
     console.error("Error fetching admin profile:", error);
