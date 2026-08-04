@@ -4,9 +4,9 @@ const { protect } = require("../middlewares/authMiddleware");
 const AdminController = require("../controllers/AdminController");
 
 // Admin Authentication
-router.post("/admin/login", AdminController.adminLogin);
+router.post("/login", AdminController.adminLogin);
 router.get("/getprofile", protect, AdminController.getAdminProfile);
-router.put("updateprofile", protect, AdminController.UpdateAdminProfile);
-router.post("/admin/logout", AdminController.LogoutProfile);
+router.put("/updateprofile", protect, AdminController.UpdateAdminProfile);
+router.post("/logout", AdminController.LogoutProfile);
 
 module.exports = router;
