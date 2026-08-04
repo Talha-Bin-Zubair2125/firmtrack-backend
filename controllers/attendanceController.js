@@ -110,6 +110,10 @@ const markAttendance = async (req, res) => {
       deduction,
     });
 
+    console.log(
+      `✅ Attendance marked for ${employee.EmployeeName} as ${status} at ${currentTimeStr}. Deduction: ${deduction}`,
+    );
+
     res.status(201).json({
       message: `Attendance marked as ${status}`,
       attendance: {
