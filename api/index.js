@@ -46,7 +46,7 @@ app.use(express.json());
 ConnectDB();
 
 // Routes
-app.use("/api/auth", authRoutes);
+app.use("/api/auth/admin", authRoutes);
 app.use("/api/admin", employeeRoutes);
 app.use("/api/admin", qrRoutes);
 app.use("/api/admin", deductionRoutes);
