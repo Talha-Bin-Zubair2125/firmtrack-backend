@@ -3,7 +3,6 @@ const QR = require("../models/qrModel");
 const Employee = require("../models/Employee_Model");
 const Deduction = require("../models/deductionModel");
 
-//  Pakistan Time Helpers
 const getPakistanDayRange = () => {
   const now = new Date();
   const pktTime = new Date(now.getTime() + 5 * 60 * 60 * 1000);
@@ -25,11 +24,9 @@ const getDayRangeForDate = (dateStr) => {
   return { start, end };
 };
 
-//  Centralized Deduction Logic
 const calculateAbsentDeduction = async (employeeId, month, year, settings) => {
-  const allowedTotalLeave = settings.allowedTotalLeave || 0; // counted as absent
+  const allowedTotalLeave = settings.allowedTotalLeave || 0;
 
-  // Count how many absences the employee ALREADY has this month
   const totalLeavesThisMonth = await Attendance.countDocuments({
     employeeId,
     month,
@@ -37,22 +34,20 @@ const calculateAbsentDeduction = async (employeeId, month, year, settings) => {
     status: "absent",
   });
 
-  // Add the current absence to the count
   const totalLeavesAfterThis = totalLeavesThisMonth + 1;
 
   let deduction = 0;
-  
+
   if (totalLeavesAfterThis > allowedTotalLeave) {
-    deduction = settings.exceedsTotalLeaveDeduction || settings.deductionPerAbsence || 0;
+    deduction =
+      settings.exceedsTotalLeaveDeduction || settings.deductionPerAbsence || 0;
   } else if (totalLeavesAfterThis <= allowedTotalLeave) {
-    // WITHIN LIMIT: This is an allowed leave, so it is FREE.
     deduction = 0;
   }
 
   return deduction;
 };
 
-//  Mark Attendance via QR (mobile)
 const markAttendance = async (req, res) => {
   const { token, employeeID } = req.body;
 
@@ -63,7 +58,9 @@ const markAttendance = async (req, res) => {
     }
 
     if (new Date() > activeQR.expiresAt) {
-      return res.status(400).json({ message: "QR code expired. Ask admin to refresh." });
+      return res
+        .status(400)
+        .json({ message: "QR code expired. Ask admin to refresh." });
     }
 
     const employee = await Employee.findOne({ employeeID });
@@ -83,14 +80,17 @@ const markAttendance = async (req, res) => {
     });
 
     if (alreadyMarked) {
-      return res.status(400).json({ message: "Attendance already marked for today" });
+      return res
+        .status(400)
+        .json({ message: "Attendance already marked for today" });
     }
 
     const settings = await Deduction.findOne();
 
     if (!settings) {
       return res.status(500).json({
-        message: "Deduction/attendance settings are not configured. Ask admin to set them up before marking attendance.",
+        message:
+          "Deduction/attendance settings are not configured. Ask admin to set them up before marking attendance.",
       });
     }
 
@@ -102,7 +102,12 @@ const markAttendance = async (req, res) => {
 
     if (currentTimeStr > "16:00") {
       status = "absent";
-      deduction = await calculateAbsentDeduction(employee._id, month, year, settings);
+      deduction = await calculateAbsentDeduction(
+        employee._id,
+        month,
+        year,
+        settings,
+      );
     } else if (currentTimeStr > settings.allowedHalfDayTime) {
       status = "half-day";
       deduction = settings.deductionPerHalfDay || 0;
@@ -121,7 +126,9 @@ const markAttendance = async (req, res) => {
       deduction,
     });
 
-    console.log(`✅ Attendance marked for ${employee.EmployeeName} as ${status} at ${currentTimeStr}. Deduction: ${deduction}`);
+    console.log(
+      `Attendance marked for ${employee.EmployeeName} as ${status} at ${currentTimeStr}. Deduction: ${deduction}`,
+    );
 
     res.status(201).json({
       message: `Attendance marked as ${status}`,
@@ -138,11 +145,13 @@ const markAttendance = async (req, res) => {
   }
 };
 
-//  Get All Attendance (admin)
 const getAllAttendance = async (req, res) => {
   try {
     const attendance = await Attendance.find()
-      .populate("employeeId", "EmployeeName employeeID EmployeeRole EmployeeSalary createdAt")
+      .populate(
+        "employeeId",
+        "EmployeeName employeeID EmployeeRole EmployeeSalary createdAt",
+      )
       .sort({ date: -1 });
 
     res.status(200).json({ attendance });
@@ -152,7 +161,6 @@ const getAllAttendance = async (req, res) => {
   }
 };
 
-//  Get Attendance By Month (reports)
 const getAttendanceByMonth = async (req, res) => {
   const { month, year, employeeID } = req.query;
   try {
@@ -176,7 +184,10 @@ const getAttendanceByMonth = async (req, res) => {
     }
 
     const attendance = await Attendance.find(filter)
-      .populate("employeeId", "EmployeeName employeeID EmployeeRole EmployeeSalary")
+      .populate(
+        "employeeId",
+        "EmployeeName employeeID EmployeeRole EmployeeSalary",
+      )
       .sort({ date: -1 });
 
     const settings = await Deduction.findOne();
@@ -204,128 +215,57 @@ const getAttendanceByMonth = async (req, res) => {
 
         if (py > todayYear) continue;
         if (py === todayYear && pm > todayMonth) continue;
-        if (py === todayYear && pm === todayMonth && i > todayDate) continue;
+
+        if (py === todayYear && pm === todayMonth && i >= todayDate) continue;
 
         if (py < joinYear) continue;
         if (py === joinYear && pm < joinMonth) continue;
         if (py === joinYear && pm === joinMonth && i < joinDate) continue;
 
-        const dummyDate = new Date(Date.UTC(py, pm - 1, i, 12, 0, 0));
-        if (dummyDate.getUTCDay() === 0) continue; // Skip Sundays
+        const loopDate = new Date(Date.UTC(py, pm - 1, i, 12, 0, 0));
+        if (loopDate.getUTCDay() === 0) continue;
 
-        const exists = results.find((a) => {
-          const aDate = new Date(a.date);
-          const aPkt = new Date(aDate.getTime() + 5 * 60 * 60 * 1000);
+        const exists = results.find((r) => {
+          if (!r.date) return false;
+          const d = new Date(r.date);
+          const dPkt = new Date(d.getTime() + 5 * 60 * 60 * 1000);
           return (
-            aPkt.getUTCDate() === i &&
-            aPkt.getUTCMonth() + 1 === pm &&
-            aPkt.getUTCFullYear() === py
+            dPkt.getUTCDate() === i &&
+            dPkt.getUTCMonth() + 1 === pm &&
+            dPkt.getUTCFullYear() === py
           );
         });
 
         if (!exists) {
-          const virtualDate = new Date(Date.UTC(py, pm - 1, i, 7, 0, 0));
           results.push({
-            date: virtualDate,
+            _id: `virtual-${py}-${pm}-${i}`,
+            employeeId: employeeObj,
+            date: new Date(Date.UTC(py, pm - 1, i, 5, 0, 0)),
             checkInTime: null,
             status: "absent",
             deduction: defaultAbsentDeduction,
-            employeeId: {
-              EmployeeName: employeeObj.EmployeeName,
-              employeeID: employeeID,
-            },
+            month: pm,
+            year: py,
           });
         }
       }
     }
 
+    results.sort((a, b) => new Date(b.date) - new Date(a.date));
+
     res.status(200).json({
-      attendance: results.sort((a, b) => new Date(b.date) - new Date(a.date)),
-      employeeCreatedAt: employeeObj?.createdAt,
+      attendance: results,
+      employeeCreatedAt: employeeObj ? employeeObj.createdAt : null,
       defaultAbsentDeduction,
     });
   } catch (error) {
-    console.error("Error fetching attendance:", error);
-    res.status(500).json({ message: "Server error" });
+    console.error("Error fetching detailed attendance:", error);
+    res.status(500).json({ message: "Server error fetching attendance" });
   }
-};
-
-//  Get Today Attendance Status (mobile)
-const getTodayAttendanceStatus = async (req, res) => {
-  const { employeeID } = req.params;
-
-  try {
-    const employee = await Employee.findOne({ employeeID });
-    if (!employee) {
-      return res.status(404).json({ message: "Employee not found" });
-    }
-
-    const { start, end } = getPakistanDayRange();
-
-    const attendance = await Attendance.findOne({
-      employeeId: employee._id,
-      date: { $gte: start, $lte: end },
-    });
-
-    if (attendance) {
-      return res.status(200).json({ marked: true, status: attendance.status });
-    } else {
-      return res.status(200).json({ marked: false, status: "Not Marked" });
-    }
-  } catch (error) {
-    console.error("Error checking today status:", error);
-    res.status(500).json({ message: "Server error checking status" });
-  }
-};
-
-// Backfill absent for a specific date (admin)
-const backfillAbsentForDate = async (dateStr) => {
-  const { start, end } = getDayRangeForDate(dateStr);
-  const [year, month, day] = dateStr.split("-").map(Number);
-
-  const targetDateISO = new Date(Date.UTC(year, month - 1, day, 7, 0, 0));
-
-  const allEmployees = await Employee.find();
-  const settings = await Deduction.findOne();
-
-  if (!settings) {
-    console.error("❌ Backfill aborted: Deduction/attendance settings are not configured.");
-    return 0;
-  }
-
-  let absentCount = 0;
-
-  for (const employee of allEmployees) {
-    const marked = await Attendance.findOne({
-      employeeId: employee._id,
-      date: { $gte: start, $lte: end },
-    });
-
-    if (!marked) {
-      const deduction = await calculateAbsentDeduction(employee._id, month, year, settings);
-
-      await Attendance.create({
-        employeeId: employee._id,
-        date: targetDateISO,
-        checkInTime: null,
-        status: "absent",
-        deduction,
-        month,
-        year,
-      });
-      absentCount++;
-      console.log(`❌ Absent backfilled for: ${employee.EmployeeName} on ${dateStr}. Deduction: ${deduction}`);
-    }
-  }
-
-  return absentCount;
 };
 
 module.exports = {
   markAttendance,
   getAllAttendance,
   getAttendanceByMonth,
-  getTodayAttendanceStatus,
-  backfillAbsentForDate,
-  calculateAbsentDeduction,
 };
