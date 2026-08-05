@@ -19,6 +19,7 @@ router.post("/mark", markAttendance);
 // Web Admin
 router.get("/attendance/getall", protect, getAllAttendance);
 router.get("/report/bymonth", getAttendanceByMonth);
+// Mobile App: Get Today's Attendance Status
 router.get("/attendance/status/:employeeID", getTodayAttendanceStatus);
 router.post("/employees/change-password", employeeController.changePassword);
 

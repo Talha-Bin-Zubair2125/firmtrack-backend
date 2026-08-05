@@ -264,8 +264,37 @@ const getAttendanceByMonth = async (req, res) => {
   }
 };
 
+//  Get Today Attendance Status (mobile)
+const getTodayAttendanceStatus = async (req, res) => {
+  const { employeeID } = req.params;
+
+  try {
+    const employee = await Employee.findOne({ employeeID });
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    const { start, end } = getPakistanDayRange();
+
+    const attendance = await Attendance.findOne({
+      employeeId: employee._id,
+      date: { $gte: start, $lte: end },
+    });
+
+    if (attendance) {
+      return res.status(200).json({ marked: true, status: attendance.status });
+    } else {
+      return res.status(200).json({ marked: false, status: "Not Marked" });
+    }
+  } catch (error) {
+    console.error("Error checking today status:", error);
+    res.status(500).json({ message: "Server error checking status" });
+  }
+};
+
 module.exports = {
   markAttendance,
   getAllAttendance,
   getAttendanceByMonth,
+  getTodayAttendanceStatus,
 };
