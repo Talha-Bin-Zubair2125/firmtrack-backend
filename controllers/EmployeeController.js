@@ -20,7 +20,7 @@ const employeeSchema = joi.object({
   EmployeePassword: joi.string().min(8).required(),
 });
 
-// Joi schema for updating employee — no EmployeeJoiningDate
+// Joi schema for updating employee 
 const employeeUpdateSchema = joi.object({
   employeeID: joi.string().required(),
   EmployeeName: joi.string().required(),
@@ -68,7 +68,6 @@ const addEmployee = async (req, res) => {
       EmployeeSalary,
       EmployeeRole,
       EmployeePassword: await brypt.hash(EmployeePassword, 10),
-      //  no EmployeeJoiningDate — createdAt set automatically by timestamps
     });
     await newEmployee.save();
     res

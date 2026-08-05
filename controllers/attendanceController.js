@@ -25,7 +25,34 @@ const getDayRangeForDate = (dateStr) => {
   return { start, end };
 };
 
-//  Mark Attendance via QR
+//  Centralized Deduction Logic
+const calculateAbsentDeduction = async (employeeId, month, year, settings) => {
+  const allowedTotalLeave = settings.allowedTotalLeave || 0; // counted as absent
+
+  // Count how many absences the employee ALREADY has this month
+  const totalLeavesThisMonth = await Attendance.countDocuments({
+    employeeId,
+    month,
+    year,
+    status: "absent",
+  });
+
+  // Add the current absence to the count
+  const totalLeavesAfterThis = totalLeavesThisMonth + 1;
+
+  let deduction = 0;
+  
+  if (totalLeavesAfterThis > allowedTotalLeave) {
+    deduction = settings.exceedsTotalLeaveDeduction || settings.deductionPerAbsence || 0;
+  } else if (totalLeavesAfterThis <= allowedTotalLeave) {
+    // WITHIN LIMIT: This is an allowed leave, so it is FREE.
+    deduction = 0;
+  }
+
+  return deduction;
+};
+
+//  Mark Attendance via QR (mobile)
 const markAttendance = async (req, res) => {
   const { token, employeeID } = req.body;
 
@@ -36,9 +63,7 @@ const markAttendance = async (req, res) => {
     }
 
     if (new Date() > activeQR.expiresAt) {
-      return res
-        .status(400)
-        .json({ message: "QR code expired. Ask admin to refresh." });
+      return res.status(400).json({ message: "QR code expired. Ask admin to refresh." });
     }
 
     const employee = await Employee.findOne({ employeeID });
@@ -58,40 +83,26 @@ const markAttendance = async (req, res) => {
     });
 
     if (alreadyMarked) {
-      return res
-        .status(400)
-        .json({ message: "Attendance already marked for today" });
+      return res.status(400).json({ message: "Attendance already marked for today" });
     }
 
     const settings = await Deduction.findOne();
 
     if (!settings) {
       return res.status(500).json({
-        message:
-          "Deduction/attendance settings are not configured. Ask admin to set them up before marking attendance.",
+        message: "Deduction/attendance settings are not configured. Ask admin to set them up before marking attendance.",
       });
     }
 
     let status = "present";
     let deduction = 0;
 
+    const month = pktTime.getUTCMonth() + 1;
+    const year = pktTime.getUTCFullYear();
+
     if (currentTimeStr > "16:00") {
       status = "absent";
-      const allowedTotalLeave = settings.allowedTotalLeave || 2; // total absences allowed per month
-      const totalLeavesThisMonth = await Attendance.countDocuments({
-        employeeId: employee._id,
-        month: pktTime.getUTCMonth() + 1,
-        year: pktTime.getUTCFullYear(),
-        status: "absent",
-      });
-
-      if (totalLeavesThisMonth > allowedTotalLeave) {
-        deduction = settings.exceedsTotalLeaveDeduction || 0;
-      } else if (totalLeavesThisMonth === allowedTotalLeave) {
-        deduction = 0;
-      } else {
-        deduction = settings.deductionPerAbsence || 0;
-      }
+      deduction = await calculateAbsentDeduction(employee._id, month, year, settings);
     } else if (currentTimeStr > settings.allowedHalfDayTime) {
       status = "half-day";
       deduction = settings.deductionPerHalfDay || 0;
@@ -105,14 +116,12 @@ const markAttendance = async (req, res) => {
       date: now,
       checkInTime: now,
       status,
-      month: pktTime.getUTCMonth() + 1,
-      year: pktTime.getUTCFullYear(),
+      month,
+      year,
       deduction,
     });
 
-    console.log(
-      `✅ Attendance marked for ${employee.EmployeeName} as ${status} at ${currentTimeStr}. Deduction: ${deduction}`,
-    );
+    console.log(`✅ Attendance marked for ${employee.EmployeeName} as ${status} at ${currentTimeStr}. Deduction: ${deduction}`);
 
     res.status(201).json({
       message: `Attendance marked as ${status}`,
@@ -133,10 +142,7 @@ const markAttendance = async (req, res) => {
 const getAllAttendance = async (req, res) => {
   try {
     const attendance = await Attendance.find()
-      .populate(
-        "employeeId",
-        "EmployeeName employeeID EmployeeRole EmployeeSalary createdAt",
-      )
+      .populate("employeeId", "EmployeeName employeeID EmployeeRole EmployeeSalary createdAt")
       .sort({ date: -1 });
 
     res.status(200).json({ attendance });
@@ -170,17 +176,13 @@ const getAttendanceByMonth = async (req, res) => {
     }
 
     const attendance = await Attendance.find(filter)
-      .populate(
-        "employeeId",
-        "EmployeeName employeeID EmployeeRole EmployeeSalary",
-      )
+      .populate("employeeId", "EmployeeName employeeID EmployeeRole EmployeeSalary")
       .sort({ date: -1 });
 
     const settings = await Deduction.findOne();
     const defaultAbsentDeduction = settings?.deductionPerAbsence || 0;
 
     const results = [...attendance];
-
     const { pktTime } = getPakistanDayRange();
 
     const todayYear = pktTime.getUTCFullYear();
@@ -209,7 +211,7 @@ const getAttendanceByMonth = async (req, res) => {
         if (py === joinYear && pm === joinMonth && i < joinDate) continue;
 
         const dummyDate = new Date(Date.UTC(py, pm - 1, i, 12, 0, 0));
-        if (dummyDate.getUTCDay() === 0) continue;
+        if (dummyDate.getUTCDay() === 0) continue; // Skip Sundays
 
         const exists = results.find((a) => {
           const aDate = new Date(a.date);
@@ -276,7 +278,7 @@ const getTodayAttendanceStatus = async (req, res) => {
   }
 };
 
-//  Backfill Absent for Specific Date
+// Backfill absent for a specific date (admin)
 const backfillAbsentForDate = async (dateStr) => {
   const { start, end } = getDayRangeForDate(dateStr);
   const [year, month, day] = dateStr.split("-").map(Number);
@@ -285,7 +287,11 @@ const backfillAbsentForDate = async (dateStr) => {
 
   const allEmployees = await Employee.find();
   const settings = await Deduction.findOne();
-  const deductionPerAbsence = settings?.deductionPerAbsence || 0;
+
+  if (!settings) {
+    console.error("❌ Backfill aborted: Deduction/attendance settings are not configured.");
+    return 0;
+  }
 
   let absentCount = 0;
 
@@ -296,19 +302,19 @@ const backfillAbsentForDate = async (dateStr) => {
     });
 
     if (!marked) {
+      const deduction = await calculateAbsentDeduction(employee._id, month, year, settings);
+
       await Attendance.create({
         employeeId: employee._id,
         date: targetDateISO,
         checkInTime: null,
         status: "absent",
-        deduction: deductionPerAbsence,
-        month: month,
-        year: year,
+        deduction,
+        month,
+        year,
       });
       absentCount++;
-      console.log(
-        `❌ Absent backfilled for: ${employee.EmployeeName} on ${dateStr}`,
-      );
+      console.log(`❌ Absent backfilled for: ${employee.EmployeeName} on ${dateStr}. Deduction: ${deduction}`);
     }
   }
 
@@ -321,4 +327,5 @@ module.exports = {
   getAttendanceByMonth,
   getTodayAttendanceStatus,
   backfillAbsentForDate,
+  calculateAbsentDeduction,
 };
