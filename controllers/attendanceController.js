@@ -195,68 +195,132 @@ const getAllAttendance = async (req, res) => {
   }
 };
 
+
 const getAttendanceByMonth = async (req, res) => {
   const { month, year, employeeID } = req.query;
   try {
-    let filter = {
-      month: parseInt(month),
-      year: parseInt(year),
-    };
-
-    let employeeObj = null;
-    if (employeeID) {
-      employeeObj = await Employee.findOne({ employeeID });
-      if (employeeObj) {
-        filter.employeeId = employeeObj._id;
-      } else {
-        return res.status(200).json({
-          attendance: [],
-          employeeCreatedAt: null,
-          defaultAbsentDeduction: 0,
-        });
-      }
-    }
-
-    const attendance = await Attendance.find(filter)
-      .populate(
-        "employeeId",
-        "EmployeeName employeeID EmployeeRole EmployeeSalary",
-      )
-      .sort({ date: -1 });
-
+    const parsedMonth = parseInt(month);
+    const parsedYear = parseInt(year);
     const settings = await Deduction.findOne();
     const defaultAbsentDeduction = settings?.deductionPerAbsence || 0;
-
-    const results = [...attendance];
     const { pktTime } = getPakistanDayRange();
-
     const todayYear = pktTime.getUTCFullYear();
     const todayMonth = pktTime.getUTCMonth() + 1;
     const todayDate = pktTime.getUTCDate();
+    const daysInMonth = new Date(parsedYear, parsedMonth, 0).getDate();
 
-    const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+    let employees = [];
+    if (employeeID) {
+      const emp = await Employee.findOne({ employeeID });
+      if (!emp) return res.status(200).json({ attendance: [] });
+      employees = [emp];
+    } else {
+      employees = await Employee.find({});
+    }
 
-    if (employeeID && employeeObj) {
-      const joining = new Date(employeeObj.createdAt);
+    const allAttendance = await Attendance.find({ month: parsedMonth, year: parsedYear });
+    let allResults = [];
+
+    for (const emp of employees) {
+      const empAttendance = allAttendance.filter(
+        (a) => a.employeeId && a.employeeId.toString() === emp._id.toString()
+      );
+      const results = [...empAttendance];
+      const joining = new Date(emp.createdAt);
       const joinPkt = new Date(joining.getTime() + 5 * 60 * 60 * 1000);
       const joinYear = joinPkt.getUTCFullYear();
       const joinMonth = joinPkt.getUTCMonth() + 1;
       const joinDate = joinPkt.getUTCDate();
 
       for (let i = 1; i <= daysInMonth; i++) {
-        const py = parseInt(year);
-        const pm = parseInt(month);
+        if (parsedYear > todayYear) continue;
+        if (parsedYear === todayYear && parsedMonth > todayMonth) continue;
+        if (parsedYear === todayYear && parsedMonth === todayMonth && i >= todayDate) continue;
+        if (parsedYear < joinYear) continue;
+        if (parsedYear === joinYear && parsedMonth < joinMonth) continue;
+        if (parsedYear === joinYear && parsedMonth === joinMonth && i < joinDate) continue;
 
-        if (py > todayYear) continue;
-        if (py === todayYear && pm > todayMonth) continue;
+        const loopDate = new Date(Date.UTC(parsedYear, parsedMonth - 1, i, 12, 0, 0));
+        if (loopDate.getUTCDay() === 0) continue; // Skip Sundays
 
-        if (py === todayYear && pm === todayMonth && i >= todayDate) continue;
+        const exists = results.find((r) => {
+          if (!r.date) return false;
+          const d = new Date(r.date);
+          const dPkt = new Date(d.getTime() + 5 * 60 * 60 * 1000);
+          return (
+            dPkt.getUTCDate() === i &&
+            dPkt.getUTCMonth() + 1 === parsedMonth &&
+            dPkt.getUTCFullYear() === parsedYear
+          );
+        });
 
-        if (py < joinYear) continue;
-        if (py === joinYear && pm < joinMonth) continue;
-        if (py === joinYear && pm === joinMonth && i < joinDate) continue;
+        if (!exists) {
+          results.push({
+            _id: `virtual-${emp._id}-${parsedYear}-${parsedMonth}-${i}`,
+            employeeId: emp,
+            date: new Date(Date.UTC(parsedYear, parsedMonth - 1, i, 5, 0, 0)),
+            checkInTime: null,
+            status: "absent",
+            deduction: defaultAbsentDeduction,
+            month: parsedMonth,
+            year: parsedYear,
+          });
+        }
+      }
+      allResults.push(...results);
+    }
 
-        const loopDate = new Date(Date.UTC(py, pm - 1, i, 12, 0, 0));
+    // Populate employee details for safety
+    await Employee.populate(allResults, { path: "employeeId", select: "EmployeeName employeeID EmployeeRole EmployeeSalary createdAt" });
+
+    allResults.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    return res.status(200).json({ attendance: allResults });
+  } catch (error) {
+    console.error("Error fetching attendance by month:", error);
+    res.status(500).json({ message: "Server error fetching attendance" });
+  }
+};
+
+
+const getMonthlySummaryReport = async (req, res) => {
+  const { month, year } = req.query;
+  try {
+    const parsedMonth = parseInt(month);
+    const parsedYear = parseInt(year);
+    const settings = await Deduction.findOne();
+    const defaultAbsentDeduction = settings?.deductionPerAbsence || 0;
+    const { pktTime } = getPakistanDayRange();
+    const todayYear = pktTime.getUTCFullYear();
+    const todayMonth = pktTime.getUTCMonth() + 1;
+    const todayDate = pktTime.getUTCDate();
+    const daysInMonth = new Date(parsedYear, parsedMonth, 0).getDate();
+
+    const employees = await Employee.find({});
+    const allAttendance = await Attendance.find({ month: parsedMonth, year: parsedYear });
+    const summary = [];
+
+    for (const emp of employees) {
+      const empAttendance = allAttendance.filter(
+        (a) => a.employeeId && a.employeeId.toString() === emp._id.toString()
+      );
+
+      const results = [...empAttendance];
+      const joining = new Date(emp.createdAt);
+      const joinPkt = new Date(joining.getTime() + 5 * 60 * 60 * 1000);
+      const joinYear = joinPkt.getUTCFullYear();
+      const joinMonth = joinPkt.getUTCMonth() + 1;
+      const joinDate = joinPkt.getUTCDate();
+
+      for (let i = 1; i <= daysInMonth; i++) {
+        if (parsedYear > todayYear) continue;
+        if (parsedYear === todayYear && parsedMonth > todayMonth) continue;
+        if (parsedYear === todayYear && parsedMonth === todayMonth && i >= todayDate) continue;
+        if (parsedYear < joinYear) continue;
+        if (parsedYear === joinYear && parsedMonth < joinMonth) continue;
+        if (parsedYear === joinYear && parsedMonth === joinMonth && i < joinDate) continue;
+
+        const loopDate = new Date(Date.UTC(parsedYear, parsedMonth - 1, i, 12, 0, 0));
         if (loopDate.getUTCDay() === 0) continue;
 
         const exists = results.find((r) => {
@@ -265,38 +329,52 @@ const getAttendanceByMonth = async (req, res) => {
           const dPkt = new Date(d.getTime() + 5 * 60 * 60 * 1000);
           return (
             dPkt.getUTCDate() === i &&
-            dPkt.getUTCMonth() + 1 === pm &&
-            dPkt.getUTCFullYear() === py
+            dPkt.getUTCMonth() + 1 === parsedMonth &&
+            dPkt.getUTCFullYear() === parsedYear
           );
         });
 
         if (!exists) {
           results.push({
-            _id: `virtual-${py}-${pm}-${i}`,
-            employeeId: employeeObj,
-            date: new Date(Date.UTC(py, pm - 1, i, 5, 0, 0)),
-            checkInTime: null,
             status: "absent",
             deduction: defaultAbsentDeduction,
-            month: pm,
-            year: py,
           });
         }
       }
+
+      let present = 0, late = 0, halfDay = 0, absent = 0, leave = 0, totalDeduction = 0;
+
+      for (const r of results) {
+        const st = r.status?.toLowerCase().trim() || "";
+        if (st === "present") present++;
+        else if (st === "late") late++;
+        else if (st === "half-day" || st === "halfday") halfDay++;
+        else if (st === "absent") absent++;
+        else if (st === "leave") leave++;
+
+        totalDeduction += r.deduction || 0;
+      }
+
+      summary.push({
+        employeeID: emp.employeeID,
+        name: emp.EmployeeName,
+        role: emp.EmployeeRole,
+        salary: emp.EmployeeSalary || 0,
+        present,
+        late,
+        halfDay,
+        absent,
+        leave,
+        totalDeduction,
+      });
     }
 
-    results.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    res.status(200).json({
-      attendance: results,
-      employeeCreatedAt: employeeObj ? employeeObj.createdAt : null,
-      defaultAbsentDeduction,
-    });
+    return res.status(200).json({ summary });
   } catch (error) {
-    console.error("Error fetching detailed attendance:", error);
-    res.status(500).json({ message: "Server error fetching attendance" });
+    console.error("Error fetching monthly summary report:", error);
+    res.status(500).json({ message: "Server error fetching report" });
   }
-};
+}
 
 const getTodayAttendanceStatus = async (req, res) => {
   const { employeeID } = req.params;
@@ -399,6 +477,7 @@ module.exports = {
   markAttendance,
   getAllAttendance,
   getAttendanceByMonth,
+  getMonthlySummaryReport,
   getTodayAttendanceStatus,
   backfillAbsentForDate,
 };

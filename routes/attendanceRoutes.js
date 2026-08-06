@@ -9,6 +9,7 @@ const {
   markAttendance,
   getAllAttendance,
   getAttendanceByMonth,
+  getMonthlySummaryReport,
   getTodayAttendanceStatus,
   backfillAbsentForDate,
 } = attendanceController;
@@ -18,7 +19,8 @@ router.post("/mark", markAttendance);
 
 // Web Admin
 router.get("/attendance/getall", protect, getAllAttendance);
-router.get("/report/bymonth", getAttendanceByMonth);
+router.get("/attendance/getbymonth", getAttendanceByMonth); 
+router.get("/report/bymonth", getMonthlySummaryReport);     
 // Mobile App: Get Today's Attendance Status
 router.get("/attendance/status/:employeeID", getTodayAttendanceStatus);
 router.post("/employees/change-password", employeeController.changePassword);
