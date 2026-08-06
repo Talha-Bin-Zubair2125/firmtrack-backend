@@ -24,25 +24,58 @@ const getDayRangeForDate = (dateStr) => {
   return { start, end };
 };
 
-const calculateAbsentDeduction = async (employeeId, month, year, settings) => {
-  const allowedTotalLeave = settings.allowedTotalLeave || 0;
-
-  const totalLeavesThisMonth = await Attendance.countDocuments({
-    employeeId,
-    month,
-    year,
-    status: "absent",
-  });
-
-  const totalLeavesAfterThis = totalLeavesThisMonth + 1;
-
+// NEW UNIFIED DEDUCTION CALCULATOR
+const calculateDeduction = async (
+  employeeId,
+  status,
+  month,
+  year,
+  settings,
+) => {
   let deduction = 0;
 
-  if (totalLeavesAfterThis > allowedTotalLeave) {
-    deduction =
-      settings.exceedsTotalLeaveDeduction || settings.deductionPerAbsence || 0;
-  } else if (totalLeavesAfterThis <= allowedTotalLeave) {
-    deduction = 0;
+  switch (status) {
+    case "absent":
+      // Rule 1: Unauthorized absences get the full absence deduction (e.g., 1500)
+      deduction = settings.deductionPerAbsence || 0;
+      break;
+
+    case "leave":
+      // Rule 2: Authorized leaves only deduct if quota is exceeded
+      const allowedTotalLeave = settings.allowedTotalLeave || 0;
+
+      const totalLeavesThisMonth = await Attendance.countDocuments({
+        employeeId,
+        month,
+        year,
+        status: "leave", // STRICTLY counting only leaves now
+      });
+
+      const totalLeavesAfterThis = totalLeavesThisMonth + 1;
+
+      if (totalLeavesAfterThis > allowedTotalLeave) {
+        // If they exceed allowed leaves (e.g., 2), deduct the exceed amount (e.g., 250)
+        deduction =
+          settings.exceedsTotalLeaveDeduction ||
+          settings.deductionPerAbsence ||
+          0;
+      } else {
+        deduction = 0; // Within limit, no deduction
+      }
+      break;
+
+    case "half-day":
+      deduction = settings.deductionPerHalfDay || 0;
+      break;
+
+    case "late":
+      deduction = settings.deductionPerLate || 0;
+      break;
+
+    case "present":
+    default:
+      deduction = 0;
+      break;
   }
 
   return deduction;
@@ -95,26 +128,27 @@ const markAttendance = async (req, res) => {
     }
 
     let status = "present";
-    let deduction = 0;
 
     const month = pktTime.getUTCMonth() + 1;
     const year = pktTime.getUTCFullYear();
 
+    // Determine Status
     if (currentTimeStr > "16:00") {
       status = "absent";
-      deduction = await calculateAbsentDeduction(
-        employee._id,
-        month,
-        year,
-        settings,
-      );
     } else if (currentTimeStr > settings.allowedHalfDayTime) {
       status = "half-day";
-      deduction = settings.deductionPerHalfDay || 0;
     } else if (currentTimeStr > settings.lateArrivalTime) {
       status = "late";
-      deduction = settings.deductionPerLate || 0;
     }
+
+    // Calculate Deduction based on the determined status
+    const deduction = await calculateDeduction(
+      employee._id,
+      status,
+      month,
+      year,
+      settings,
+    );
 
     const attendance = await Attendance.create({
       employeeId: employee._id,
@@ -264,7 +298,6 @@ const getAttendanceByMonth = async (req, res) => {
   }
 };
 
-//  Get Today Attendance Status (mobile)
 const getTodayAttendanceStatus = async (req, res) => {
   const { employeeID } = req.params;
 
@@ -298,7 +331,7 @@ const backfillAbsentForDate = async (dateStr) => {
   // Skip Sundays (0 = Sunday)
   const targetDateObj = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
   if (targetDateObj.getUTCDay() === 0) {
-    return 0; 
+    return 0;
   }
 
   const { start, end } = getDayRangeForDate(dateStr);
@@ -336,11 +369,13 @@ const backfillAbsentForDate = async (dateStr) => {
     });
 
     if (!existing) {
-      const deduction = await calculateAbsentDeduction(
+      // Calculate straight absence deduction for backfilled days
+      const deduction = await calculateDeduction(
         employee._id,
+        "absent",
         month,
         year,
-        settings
+        settings,
       );
 
       await Attendance.create({
