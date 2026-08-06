@@ -24,7 +24,7 @@ router.get("/attendance/status/:employeeID", getTodayAttendanceStatus);
 router.post("/employees/change-password", employeeController.changePassword);
 
 //  Cron: Backfill Absent Records
-router.get("/absent/markabsent", async (req, res) => {
+router.get("/absent/markabsent", cronAuth, async (req, res) => {
   try {
     let targetDate;
 
