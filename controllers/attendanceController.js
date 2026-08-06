@@ -292,9 +292,78 @@ const getTodayAttendanceStatus = async (req, res) => {
   }
 };
 
+const backfillAbsentForDate = async (dateStr) => {
+  const [year, month, day] = dateStr.split("-").map(Number);
+
+  // Skip Sundays (0 = Sunday)
+  const targetDateObj = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  if (targetDateObj.getUTCDay() === 0) {
+    return 0; 
+  }
+
+  const { start, end } = getDayRangeForDate(dateStr);
+  const employees = await Employee.find({});
+  const settings = await Deduction.findOne();
+
+  if (!settings) {
+    throw new Error("Deduction settings are not configured in database.");
+  }
+
+  let createdCount = 0;
+
+  for (const employee of employees) {
+    // Check if target date is before employee joining date
+    if (employee.createdAt) {
+      const joining = new Date(employee.createdAt);
+      const joinPkt = new Date(joining.getTime() + 5 * 60 * 60 * 1000);
+      const joinYear = joinPkt.getUTCFullYear();
+      const joinMonth = joinPkt.getUTCMonth() + 1;
+      const joinDate = joinPkt.getUTCDate();
+
+      if (
+        year < joinYear ||
+        (year === joinYear && month < joinMonth) ||
+        (year === joinYear && month === joinMonth && day < joinDate)
+      ) {
+        continue; // Employee hadn't joined yet
+      }
+    }
+
+    // Check if attendance already exists for this date window
+    const existing = await Attendance.findOne({
+      employeeId: employee._id,
+      date: { $gte: start, $lte: end },
+    });
+
+    if (!existing) {
+      const deduction = await calculateAbsentDeduction(
+        employee._id,
+        month,
+        year,
+        settings
+      );
+
+      await Attendance.create({
+        employeeId: employee._id,
+        date: new Date(Date.UTC(year, month - 1, day, 5, 0, 0)),
+        checkInTime: null,
+        status: "absent",
+        month,
+        year,
+        deduction,
+      });
+
+      createdCount++;
+    }
+  }
+
+  return createdCount;
+};
+
 module.exports = {
   markAttendance,
   getAllAttendance,
   getAttendanceByMonth,
   getTodayAttendanceStatus,
+  backfillAbsentForDate,
 };
