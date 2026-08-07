@@ -12,10 +12,14 @@ const {
   getMonthlySummaryReport,
   getTodayAttendanceStatus,
   backfillAbsentForDate,
+  markLeave,
+  getLeaveBalance,
 } = attendanceController;
 
 // Mobile App
 router.post("/mark", markAttendance);
+router.post("/leave/mark", markLeave);
+router.get("/leave/balance/:employeeID", getLeaveBalance);
 
 // Web Admin
 router.get("/attendance/getall", protect, getAllAttendance);
